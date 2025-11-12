@@ -181,6 +181,20 @@ export default function PostEditor() {
       return;
     }
 
+    // Basic YouTube URL validation if provided
+    const ytUrl = formData.youtube_url?.trim();
+    if (ytUrl) {
+      const isValidYoutube = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[^\s&]+/.test(ytUrl);
+      if (!isValidYoutube) {
+        toast({
+          title: 'Invalid YouTube URL',
+          description: 'Provide a valid YouTube link like https://www.youtube.com/watch?v=...',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     setSaving(true);
 
     const postData = {
@@ -188,6 +202,8 @@ export default function PostEditor() {
       status: status || formData.status,
       author_id: user?.id,
       publish_at: formData.publish_at || null,
+      // Ensure slug exists when saving a new post
+      slug: (formData.slug && formData.slug.trim().length > 0) ? formData.slug : generateSlug(formData.title),
     };
 
     let postId = id;

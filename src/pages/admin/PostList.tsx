@@ -134,9 +134,12 @@ export default function PostList() {
       .single();
 
     if (error) {
+      const isRls = /row-level security/i.test(error.message);
       toast({
         title: 'Error creating post',
-        description: error.message,
+        description: isRls
+          ? 'Permission denied by database policy. Please ensure you are authenticated and allowed to create posts.'
+          : error.message,
         variant: 'destructive',
       });
       return;
