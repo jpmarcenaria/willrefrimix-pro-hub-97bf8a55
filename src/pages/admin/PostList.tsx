@@ -112,9 +112,51 @@ export default function PostList() {
       navigate('/auth');
       return;
     }
-    // Refatoração: não criar draft automaticamente.
-    // Navegar para o editor com id "new" e deixar o INSERT acontecer ao salvar.
-    navigate('/admin/posts/new');
+
+    const defaultTitle = 'Untitled';
+    const defaultSlug = `untitled-${Date.now()}`;
+
+  const { data, error } = await supabase
+      .from('posts')
+      .insert([{
+        title: defaultTitle,
+        slug: defaultSlug,
+        summary: '',
+        body: '',
+        featured_image_url: '',
+        youtube_url: '',
+        tags: [],
+        status: 'draft',
+        publish_at: null,
+        author_id: user.id,
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      const isRls = /row-level security/i.test(error.message);
+      toast({
+        title: 'Error creating post',
+        description: isRls
+          ? 'Permission denied by database policy. Please ensure you are authenticated and allowed to create posts.'
+          : error.message,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!data || !data.id) {
+      toast({
+        title: 'Draft creation incomplete',
+        description: 'Post was created but could not retrieve its ID. Please refresh the list.',
+        variant: 'destructive',
+      });
+      fetchPosts();
+      return;
+    }
+
+    toast({ title: 'Draft created successfully' });
+    navigate(`/admin/posts/${data.id}`);
   };
 
   return (
