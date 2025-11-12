@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "EditorConfig.EditorConfig",
+    "DavidAnson.vscode-markdownlint",
+    "ms-vscode-remote.remote-wsl",
+    "GitHub.vscode-pull-request-github"
+  ]
+}
+
