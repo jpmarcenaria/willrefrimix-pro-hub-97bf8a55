@@ -23,7 +23,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isEditor, setIsEditor] = useState(false);
   const navigate = useNavigate();
-  const ALLOWED_ADMIN_EMAILS = ['refrimixtecnologia@gmail.com'];
 
   useEffect(() => {
     // Set up auth state listener
@@ -64,9 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       console.error('Error fetching user roles:', error);
-      const fallbackIsAdmin = !!userEmail && ALLOWED_ADMIN_EMAILS.includes(userEmail);
-      setIsAdmin(fallbackIsAdmin);
-      setIsEditor(fallbackIsAdmin);
+      setIsAdmin(false);
+      setIsEditor(false);
       setLoading(false);
       return;
     }
@@ -74,9 +72,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const roles = data?.map(r => r.role) || [];
     const hasAdminRole = roles.includes('admin');
     const hasEditorRole = roles.includes('admin') || roles.includes('editor');
-    const emailIsAdmin = !!userEmail && ALLOWED_ADMIN_EMAILS.includes(userEmail);
-    setIsAdmin(hasAdminRole || emailIsAdmin);
-    setIsEditor(hasEditorRole || emailIsAdmin);
+    setIsAdmin(hasAdminRole);
+    setIsEditor(hasEditorRole);
     setLoading(false);
   };
 
