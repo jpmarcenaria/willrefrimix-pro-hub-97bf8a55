@@ -21,8 +21,13 @@ interface PostData {
   featured_image_url: string;
   youtube_url: string;
   tags: string[];
+  keywords: string[];
+  category: string;
+  meta_title: string;
+  meta_description: string;
   status: 'draft' | 'published' | 'scheduled';
   publish_at: string;
+  reading_time_minutes: number;
 }
 
 export default function PostEditor() {
@@ -44,8 +49,13 @@ export default function PostEditor() {
     featured_image_url: '',
     youtube_url: '',
     tags: [],
+    keywords: [],
+    category: 'technical',
+    meta_title: '',
+    meta_description: '',
     status: 'draft',
     publish_at: '',
+    reading_time_minutes: 0,
   });
 
   const [galleryImages, setGalleryImages] = useState<Array<{
@@ -94,6 +104,10 @@ export default function PostEditor() {
 
     setFormData({
       ...data,
+      keywords: data.keywords || [],
+      category: (data.category as PostData['category']) || 'technical',
+      meta_title: data.meta_title || '',
+      meta_description: data.meta_description || '',
       publish_at: data.publish_at ? new Date(data.publish_at).toISOString().slice(0, 16) : '',
     });
     setLoading(false);
@@ -210,12 +224,13 @@ export default function PostEditor() {
 
     setSaving(true);
 
-    const postData = {
+    const postData: any = {
       ...formData,
       status: status || formData.status,
       author_id: user?.id,
       publish_at: formData.publish_at || null,
-      // Ensure slug exists when saving a new post
+      meta_title: formData.meta_title || formData.title.slice(0, 60),
+      meta_description: formData.meta_description || formData.summary?.slice(0, 160),
       slug: (formData.slug && formData.slug.trim().length > 0) ? formData.slug : generateSlug(formData.title),
     };
 
