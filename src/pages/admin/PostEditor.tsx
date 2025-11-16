@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import { ArrowLeft, Save, Eye, Upload, X, Image as ImageIcon } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import SEOPreview from '@/components/blog/SEOPreview';
 
 interface PostData {
   title: string;
@@ -40,6 +41,7 @@ export default function PostEditor() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [tagInput, setTagInput] = useState('');
+  const [keywordInput, setKeywordInput] = useState('');
   
   const [formData, setFormData] = useState<PostData>({
     title: '',
@@ -198,11 +200,55 @@ export default function PostEditor() {
     }));
   };
 
+  const addKeyword = () => {
+    if (keywordInput.trim() && !formData.keywords.includes(keywordInput.trim())) {
+      if (formData.keywords.length >= 8) {
+        toast({
+          title: 'Maximum keywords reached',
+          description: 'You can add up to 8 keywords for optimal SEO',
+          variant: 'destructive',
+        });
+        return;
+      }
+      setFormData(prev => ({
+        ...prev,
+        keywords: [...prev.keywords, keywordInput.trim()],
+      }));
+      setKeywordInput('');
+    }
+  };
+
+  const removeKeyword = (keyword: string) => {
+    setFormData(prev => ({
+      ...prev,
+      keywords: prev.keywords.filter(k => k !== keyword),
+    }));
+  };
+
   const handleSave = async (status?: 'draft' | 'published') => {
     if (!formData.title || !formData.body) {
       toast({
         title: 'Missing required fields',
         description: 'Please fill in title and body',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // SEO validation when publishing
+    if ((status === 'published' || formData.status === 'published') && !formData.meta_description) {
+      toast({
+        title: 'Meta Description Required',
+        description: 'Please add a meta description (120-160 characters) for better SEO before publishing',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if ((status === 'published' || formData.status === 'published') && formData.keywords.length < 5) {
+      toast({
+        title: 'SEO Keywords Recommended',
+        description: 'Add at least 5 keywords for optimal SEO (currently: ' + formData.keywords.length + ')',
         variant: 'destructive',
       });
       return;
@@ -338,12 +384,13 @@ export default function PostEditor() {
         </div>
       </div>
 
-      <Tabs defaultValue="content" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="content">Content</TabsTrigger>
-          <TabsTrigger value="media">Media</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-        </TabsList>
+        <Tabs defaultValue="content" className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="content">Content</TabsTrigger>
+            <TabsTrigger value="seo">SEO</TabsTrigger>
+            <TabsTrigger value="media">Media</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
+          </TabsList>
 
         <TabsContent value="content" className="space-y-4">
           <Card>
@@ -390,6 +437,138 @@ export default function PostEditor() {
                   className="font-mono"
                 />
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="seo" className="space-y-4">
+          <SEOPreview
+            title={formData.meta_title || formData.title}
+            metaDescription={formData.meta_description}
+            slug={formData.slug}
+            featuredImage={formData.featured_image_url}
+          />
+
+          <Card>
+            <CardHeader>
+              <CardTitle>SEO Meta Tags</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Otimize seu conteúdo para motores de busca (Google, Bing) e redes sociais
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="meta_title">Meta Title</Label>
+                <Input
+                  id="meta_title"
+                  value={formData.meta_title}
+                  onChange={(e) => setFormData(prev => ({ ...prev, meta_title: e.target.value }))}
+                  placeholder="Deixe vazio para usar o título do post"
+                  maxLength={60}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {formData.meta_title.length}/60 caracteres (ideal: 50-60)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="meta_description">Meta Description *</Label>
+                <Textarea
+                  id="meta_description"
+                  value={formData.meta_description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, meta_description: e.target.value }))}
+                  placeholder="Descreva o conteúdo do post de forma atrativa (ideal: 120-160 caracteres)"
+                  maxLength={160}
+                  rows={3}
+                />
+                <div className="flex justify-between text-xs">
+                  <span className={
+                    formData.meta_description.length === 0 ? 'text-muted-foreground' :
+                    formData.meta_description.length >= 120 && formData.meta_description.length <= 160 ? 'text-green-600' :
+                    formData.meta_description.length > 160 ? 'text-destructive' :
+                    'text-yellow-600'
+                  }>
+                    {formData.meta_description.length}/160 caracteres
+                  </span>
+                  {formData.meta_description.length > 0 && (
+                    <span>
+                      {formData.meta_description.length >= 120 && formData.meta_description.length <= 160 ? '✓ Tamanho ideal' :
+                       formData.meta_description.length > 160 ? '⚠ Muito longo' :
+                       '⚠ Muito curto (ideal: 120-160)'}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>SEO Keywords</Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Adicione 5-8 palavras-chave relacionadas ao conteúdo (ex: VRF, Daikin, ar-condicionado, HVAC)
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Adicionar keyword SEO"
+                    value={keywordInput}
+                    onChange={(e) => setKeywordInput(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addKeyword())}
+                  />
+                  <Button 
+                    type="button" 
+                    onClick={addKeyword}
+                    disabled={formData.keywords.length >= 8}
+                  >
+                    Add
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {formData.keywords.map((keyword) => (
+                    <Badge key={keyword} variant="secondary" className="gap-1">
+                      {keyword}
+                      <X
+                        className="h-3 w-3 cursor-pointer"
+                        onClick={() => removeKeyword(keyword)}
+                      />
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {formData.keywords.length}/8 keywords
+                  {formData.keywords.length < 5 && ' (recomendado: pelo menos 5)'}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="category">Categoria</Label>
+                <Select
+                  value={formData.category}
+                  onValueChange={(value: any) => setFormData(prev => ({ ...prev, category: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="technical">Técnico</SelectItem>
+                    <SelectItem value="case-study">Caso de Estudo</SelectItem>
+                    <SelectItem value="installation">Instalação</SelectItem>
+                    <SelectItem value="maintenance">Manutenção</SelectItem>
+                    <SelectItem value="sustainability">Sustentabilidade</SelectItem>
+                    <SelectItem value="industry-news">Notícias do Setor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Dicas de SEO para HVAC-R</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <p>✓ Use palavras-chave naturalmente no texto</p>
+              <p>✓ Foque em termos técnicos: VRF, inverter, BTU, HVAC, refrigeração</p>
+              <p>✓ Mencione marcas líderes: Daikin, Carrier, Midea quando relevante</p>
+              <p>✓ Inclua localização quando apropriado (Brasil, São Paulo, etc.)</p>
+              <p>✓ Meta description deve ser atrativa e incluir call-to-action</p>
             </CardContent>
           </Card>
         </TabsContent>
