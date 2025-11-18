@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,9 +10,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, Eye, Upload, X, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Save, Eye, Upload, X, Image as ImageIcon, RefreshCw, CheckCircle2, AlertCircle, Loader2, Clock } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
 import SEOPreview from '@/components/blog/SEOPreview';
+import ImageCropper from '@/components/admin/ImageCropper';
+import DateTimePicker from '@/components/admin/DateTimePicker';
 
 interface PostData {
   title: string;
@@ -42,6 +45,12 @@ export default function PostEditor() {
   const [uploading, setUploading] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [keywordInput, setKeywordInput] = useState('');
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'error'>('synced');
+  const [cropImage, setCropImage] = useState<File | null>(null);
+  const [isCropForFeatured, setIsCropForFeatured] = useState(false);
+  const [saveProgress, setSaveProgress] = useState(0);
   
   const [formData, setFormData] = useState<PostData>({
     title: '',
@@ -72,6 +81,51 @@ export default function PostEditor() {
       fetchGalleryImages();
     }
   }, [id, isNew]);
+
+  // Auto-save every 30 seconds
+  useEffect(() => {
+    if (isNew || !formData.title) return;
+
+    const autoSaveInterval = setInterval(() => {
+      handleAutoSave();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(autoSaveInterval);
+  }, [formData, isNew]);
+
+  const handleAutoSave = useCallback(async () => {
+    if (!formData.title || !formData.body || isNew) return;
+    
+    setAutoSaving(true);
+    setSyncStatus('saving');
+    
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .update({
+          title: formData.title,
+          slug: formData.slug,
+          body: formData.body,
+          summary: formData.summary,
+          category: formData.category as any,
+          tags: formData.tags,
+          keywords: formData.keywords,
+          meta_title: formData.meta_title,
+          meta_description: formData.meta_description,
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setLastSaved(new Date());
+      setSyncStatus('synced');
+    } catch (error) {
+      console.error('Auto-save error:', error);
+      setSyncStatus('error');
+    } finally {
+      setAutoSaving(false);
+    }
+  }, [formData, id, isNew]);
 
   const fetchPost = async () => {
     if (!id) return;
@@ -146,41 +200,77 @@ export default function PostEditor() {
     }));
   };
 
+  const handleRegenerateSlug = () => {
+    if (!formData.title) {
+      toast({
+        title: 'Título necessário',
+        description: 'Adicione um título antes de gerar o slug',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    const newSlug = generateSlug(formData.title);
+    setFormData(prev => ({ ...prev, slug: newSlug }));
+    toast({
+      title: 'Slug regenerado',
+      description: `Novo slug: ${newSlug}`,
+    });
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isFeatured: boolean = false) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Open cropper instead of direct upload
+    setCropImage(file);
+    setIsCropForFeatured(isFeatured);
+    e.target.value = ''; // Reset input
+  };
+
+  const handleCropComplete = async (croppedFile: File) => {
     setUploading(true);
-    const fileExt = file.name.split('.').pop();
+    setSaveProgress(0);
+    setSaveProgress(10);
+    const fileExt = croppedFile.name.split('.').pop();
     const fileName = `${Math.random()}.${fileExt}`;
     const filePath = `${fileName}`;
 
+    setSaveProgress(30);
     const { error: uploadError, data } = await supabase.storage
       .from('blog-images')
-      .upload(filePath, file);
+      .upload(filePath, croppedFile);
 
+    setSaveProgress(60);
     if (uploadError) {
       toast({
-        title: 'Error uploading image',
+        title: 'Erro ao fazer upload',
         description: uploadError.message,
         variant: 'destructive',
       });
+      setSyncStatus('error');
     } else {
+      setSaveProgress(80);
       const { data: { publicUrl } } = supabase.storage
         .from('blog-images')
         .getPublicUrl(filePath);
 
-      if (isFeatured) {
+      if (isCropForFeatured) {
         setFormData(prev => ({ ...prev, featured_image_url: publicUrl }));
       } else {
         setGalleryImages(prev => [...prev, { url: publicUrl, caption: '' }]);
       }
 
+      setSaveProgress(100);
       toast({
-        title: 'Image uploaded successfully',
+        title: '✓ Imagem enviada com sucesso',
+        description: 'Imagem otimizada e pronta para uso',
       });
+      setSyncStatus('synced');
     }
     setUploading(false);
+    setCropImage(null);
+    setSaveProgress(0);
   };
 
   const addTag = () => {
@@ -228,8 +318,8 @@ export default function PostEditor() {
   const handleSave = async (status?: 'draft' | 'published') => {
     if (!formData.title || !formData.body) {
       toast({
-        title: 'Missing required fields',
-        description: 'Please fill in title and body',
+        title: '⚠ Campos obrigatórios faltando',
+        description: 'Preencha título e conteúdo do post',
         variant: 'destructive',
       });
       return;
@@ -269,6 +359,8 @@ export default function PostEditor() {
     }
 
     setSaving(true);
+    setSyncStatus('saving');
+    setSaveProgress(0);
 
     const postData: any = {
       ...formData,
@@ -282,41 +374,52 @@ export default function PostEditor() {
 
     let postId = id;
 
+    setSaveProgress(40);
     if (isNew) {
+      setSaveProgress(50);
       const { data, error } = await supabase
         .from('posts')
         .insert([postData])
         .select()
         .single();
 
+      setSaveProgress(70);
       if (error) {
         toast({
-          title: 'Error creating post',
+          title: '✗ Erro ao criar post',
           description: error.message,
           variant: 'destructive',
         });
+        setSyncStatus('error');
         setSaving(false);
+        setSaveProgress(0);
         return;
       }
+      setSaveProgress(90);
       postId = data.id;
     } else {
+      setSaveProgress(60);
       const { error } = await supabase
         .from('posts')
         .update(postData)
         .eq('id', id);
 
+      setSaveProgress(80);
       if (error) {
         toast({
-          title: 'Error updating post',
+          title: '✗ Erro ao atualizar post',
           description: error.message,
           variant: 'destructive',
         });
+        setSyncStatus('error');
         setSaving(false);
+        setSaveProgress(0);
         return;
       }
     }
 
     // Save gallery images
+    setSaveProgress(90);
     for (const [index, image] of galleryImages.entries()) {
       if (!image.id) {
         await supabase.from('images').insert([{
@@ -335,11 +438,22 @@ export default function PostEditor() {
       }
     }
 
+    setSaveProgress(100);
+    setLastSaved(new Date());
+    setSyncStatus('synced');
+    
+    const finalStatus = status || formData.status;
     toast({
-      title: 'Post saved successfully',
+      title: '✓ Post salvo com sucesso',
+      description: finalStatus === 'published' 
+        ? 'Seu post está publicado e visível' 
+        : formData.status === 'scheduled' 
+        ? `Agendado para ${formData.publish_at ? new Date(formData.publish_at).toLocaleString() : ''}`
+        : 'Salvo como rascunho',
     });
 
     setSaving(false);
+    setSaveProgress(0);
     if (isNew) {
       navigate(`/admin/posts/${postId}`);
     }
@@ -364,6 +478,34 @@ export default function PostEditor() {
           <h1 className="text-3xl font-bold">
             {isNew ? 'New Post' : 'Edit Post'}
           </h1>
+          {!isNew && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              {syncStatus === 'synced' && (
+                <span className="flex items-center gap-1 text-green-600">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Sincronizado
+                </span>
+              )}
+              {syncStatus === 'saving' && (
+                <span className="flex items-center gap-1">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Salvando...
+                </span>
+              )}
+              {syncStatus === 'error' && (
+                <span className="flex items-center gap-1 text-destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  Erro ao salvar
+                </span>
+              )}
+              {lastSaved && syncStatus === 'synced' && (
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {lastSaved.toLocaleTimeString()}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           {!isNew && (
@@ -375,14 +517,25 @@ export default function PostEditor() {
             </Button>
           )}
           <Button onClick={() => handleSave('draft')} disabled={saving} variant="outline">
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Save Draft
           </Button>
           <Button onClick={() => handleSave('published')} disabled={saving}>
-            <Save className="mr-2 h-4 w-4" />
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             {formData.status === 'published' ? 'Update' : 'Publish'}
           </Button>
         </div>
       </div>
+
+      {saveProgress > 0 && saveProgress < 100 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Processando...</span>
+            <span className="font-medium">{saveProgress}%</span>
+          </div>
+          <Progress value={saveProgress} className="h-2" />
+        </div>
+      )}
 
         <Tabs defaultValue="content" className="w-full">
           <TabsList className="grid w-full grid-cols-4">
@@ -396,7 +549,15 @@ export default function PostEditor() {
           <Card>
             <CardContent className="pt-6 space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="title">Title *</Label>
+                <Label htmlFor="title" className="flex items-center gap-2">
+                  Title *
+                  {formData.title && (
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  )}
+                  {!formData.title && (
+                    <AlertCircle className="h-4 w-4 text-yellow-600" />
+                  )}
+                </Label>
                 <Input
                   id="title"
                   value={formData.title}
@@ -406,13 +567,28 @@ export default function PostEditor() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="slug">Slug</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="slug">Slug</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRegenerateSlug}
+                    disabled={!formData.title}
+                  >
+                    <RefreshCw className="h-3 w-3 mr-2" />
+                    Regenerar
+                  </Button>
+                </div>
                 <Input
                   id="slug"
                   value={formData.slug}
                   onChange={(e) => setFormData(prev => ({ ...prev, slug: e.target.value }))}
                   placeholder="post-url-slug"
                 />
+                <p className="text-xs text-muted-foreground">
+                  URL amigável gerada automaticamente do título
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -427,7 +603,15 @@ export default function PostEditor() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="body">Content (Markdown) *</Label>
+                <Label htmlFor="body" className="flex items-center gap-2">
+                  Content (Markdown) *
+                  {formData.body && (
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  )}
+                  {!formData.body && (
+                    <AlertCircle className="h-4 w-4 text-yellow-600" />
+                  )}
+                </Label>
                 <Textarea
                   id="body"
                   value={formData.body}
@@ -693,15 +877,11 @@ export default function PostEditor() {
               </div>
 
               {formData.status === 'scheduled' && (
-                <div className="space-y-2">
-                  <Label htmlFor="publish_at">Publish At</Label>
-                  <Input
-                    id="publish_at"
-                    type="datetime-local"
-                    value={formData.publish_at}
-                    onChange={(e) => setFormData(prev => ({ ...prev, publish_at: e.target.value }))}
-                  />
-                </div>
+                <DateTimePicker
+                  label="Data e Hora de Publicação"
+                  value={formData.publish_at}
+                  onChange={(value) => setFormData(prev => ({ ...prev, publish_at: value }))}
+                />
               )}
 
               <div className="space-y-2">
@@ -731,6 +911,18 @@ export default function PostEditor() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {cropImage && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="max-w-2xl w-full">
+            <ImageCropper
+              file={cropImage}
+              onCropComplete={handleCropComplete}
+              onCancel={() => setCropImage(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
