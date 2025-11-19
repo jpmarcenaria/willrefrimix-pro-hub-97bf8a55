@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useDebounce } from '@/hooks/useDebounce';
+import { debounce } from 'lodash';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -56,6 +56,7 @@ export default function PostEditor() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const initialLoadRef = useRef(true);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const [formData, setFormData] = useState<PostData>({
     title: '',
@@ -73,9 +74,6 @@ export default function PostEditor() {
     publish_at: '',
     reading_time_minutes: 0,
   });
-
-  // Debounce formData for auto-save (500ms)
-  const debouncedFormData = useDebounce(formData, 500);
 
   const [galleryImages, setGalleryImages] = useState<Array<{
     id?: string;
@@ -144,21 +142,8 @@ export default function PostEditor() {
       .subscribe();
   };
 
-  // Auto-save with debounce
-  useEffect(() => {
-    // Skip initial load
-    if (initialLoadRef.current) {
-      initialLoadRef.current = false;
-      return;
-    }
-
-    // Skip if new post or no essential data
-    if (isNew || !debouncedFormData.title || !id) return;
-
-    handleAutoSave();
-  }, [debouncedFormData]);
-
-  const handleAutoSave = useCallback(async () => {
+  // Auto-save function with proper error handling
+  const performAutoSave = useCallback(async (data: PostData) => {
     if (!id || isNew || saving) return;
     
     setAutoSaving(true);
@@ -168,44 +153,62 @@ export default function PostEditor() {
       const { error } = await supabase
         .from('posts')
         .update({
-          title: debouncedFormData.title,
-          slug: debouncedFormData.slug,
-          body: debouncedFormData.body,
-          summary: debouncedFormData.summary,
-          category: debouncedFormData.category as any,
-          tags: debouncedFormData.tags,
-          keywords: debouncedFormData.keywords,
-          meta_title: debouncedFormData.meta_title,
-          meta_description: debouncedFormData.meta_description,
-          status: debouncedFormData.status as any,
-          publish_at: debouncedFormData.publish_at || null,
+          title: data.title,
+          slug: data.slug,
+          body: data.body,
+          summary: data.summary,
+          category: data.category as any,
+          tags: data.tags,
+          keywords: data.keywords,
+          meta_title: data.meta_title,
+          meta_description: data.meta_description,
+          status: data.status as any,
+          publish_at: data.publish_at || null,
+          updated_at: new Date().toISOString(),
         })
         .eq('id', id);
 
       if (error) throw error;
 
-      setLastSaved(new Date());
+      const now = new Date();
+      setLastSaved(now);
       setSyncStatus('synced');
       setHasUnsavedChanges(false);
       
-      // Silent success toast
       toast({
-        title: '✓ Salvo automaticamente',
-        description: new Date().toLocaleTimeString('pt-BR'),
+        title: 'Post salvo automaticamente',
+        description: `Sincronizado ${now.toLocaleTimeString('pt-BR')}`,
         duration: 2000,
       });
     } catch (error: any) {
       console.error('Auto-save error:', error);
       setSyncStatus('error');
       toast({
-        title: '✗ Erro ao salvar',
+        title: 'Erro ao salvar',
         description: error.message,
         variant: 'destructive',
+        duration: 3000,
       });
     } finally {
       setAutoSaving(false);
     }
-  }, [debouncedFormData, id, isNew, saving]);
+  }, [id, isNew, saving]);
+
+  // Debounced auto-save for content fields (1500ms)
+  const debouncedContentSave = useCallback(
+    debounce((data: PostData) => {
+      performAutoSave(data);
+    }, 1500),
+    [performAutoSave]
+  );
+
+  // Debounced auto-save for status field (800ms)
+  const debouncedStatusSave = useCallback(
+    debounce((data: PostData) => {
+      performAutoSave(data);
+    }, 800),
+    [performAutoSave]
+  );
 
   const fetchPost = async () => {
     if (!id) return;
@@ -287,24 +290,64 @@ export default function PostEditor() {
 
   const handleTitleChange = (title: string) => {
     setHasUnsavedChanges(true);
-    setSyncStatus('saving');
-    setFormData(prev => ({
-      ...prev,
-      title,
-      slug: isNew ? generateSlug(title) : prev.slug,
-    }));
+    const newFormData = { ...formData, title, slug: isNew ? generateSlug(title) : formData.slug };
+    setFormData(newFormData);
+    
+    if (!isNew && id) {
+      setSyncStatus('saving');
+      debouncedContentSave(newFormData);
+    }
   };
 
   const handleBodyChange = (body: string) => {
     setHasUnsavedChanges(true);
-    setSyncStatus('saving');
-    setFormData(prev => ({ ...prev, body }));
+    const newFormData = { ...formData, body };
+    setFormData(newFormData);
+    
+    if (!isNew && id) {
+      setSyncStatus('saving');
+      debouncedContentSave(newFormData);
+    }
+  };
+
+  const handleSummaryChange = (summary: string) => {
+    setHasUnsavedChanges(true);
+    const newFormData = { ...formData, summary };
+    setFormData(newFormData);
+    
+    if (!isNew && id) {
+      setSyncStatus('saving');
+      debouncedContentSave(newFormData);
+    }
+  };
+
+  const handleStatusChange = (status: 'draft' | 'published' | 'scheduled') => {
+    setHasUnsavedChanges(true);
+    const newFormData = { ...formData, status };
+    setFormData(newFormData);
+    
+    if (!isNew && id) {
+      setSyncStatus('saving');
+      debouncedStatusSave(newFormData);
+    }
   };
 
   const handleFieldChange = (field: keyof PostData, value: any) => {
     setHasUnsavedChanges(true);
-    setSyncStatus('saving');
-    setFormData(prev => ({ ...prev, [field]: value }));
+    const newFormData = { ...formData, [field]: value };
+    setFormData(newFormData);
+    
+    // Use appropriate debounce based on field type
+    if (!isNew && id) {
+      setSyncStatus('saving');
+      if (field === 'status') {
+        debouncedStatusSave(newFormData);
+      } else if (field === 'title' || field === 'body' || field === 'summary') {
+        debouncedContentSave(newFormData);
+      } else {
+        debouncedContentSave(newFormData);
+      }
+    }
   };
 
   const handleRegenerateSlug = () => {
@@ -718,7 +761,7 @@ export default function PostEditor() {
                 <Textarea
                   id="summary"
                   value={formData.summary}
-                  onChange={(e) => handleFieldChange('summary', e.target.value)}
+                  onChange={(e) => handleSummaryChange(e.target.value)}
                   placeholder="Brief summary of the post"
                   rows={3}
                 />
@@ -985,7 +1028,7 @@ export default function PostEditor() {
                 <Label htmlFor="status">Status</Label>
                 <Select
                   value={formData.status}
-                  onValueChange={(value: any) => handleFieldChange('status', value)}
+                  onValueChange={handleStatusChange}
                 >
                   <SelectTrigger>
                     <SelectValue />
