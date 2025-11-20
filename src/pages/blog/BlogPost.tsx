@@ -13,6 +13,7 @@ import YouTubeEmbed from '@/components/blog/YouTubeEmbed';
 import ImageGallery from '@/components/blog/ImageGallery';
 import SocialShare from '@/components/blog/SocialShare';
 import SEOHead from '@/components/blog/SEOHead';
+import OptimizedImage from '@/components/OptimizedImage';
 
 interface Post {
   id: string;
@@ -135,10 +136,12 @@ export default function BlogPost() {
 
           {post.featured_image_url && (
             <div className="aspect-video rounded-xl overflow-hidden mb-8">
-              <img
+              <OptimizedImage
                 src={post.featured_image_url}
                 alt={post.title}
-                className="w-full h-full object-cover"
+                priority={true}
+                className="w-full h-full"
+                objectFit="cover"
               />
             </div>
           )}
