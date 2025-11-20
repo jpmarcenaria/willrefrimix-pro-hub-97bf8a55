@@ -1,6 +1,4 @@
-# Robots.txt para WillRefriMix - HVAC-R, Ar-Condicionado e VRF Brasil
-# Otimizado para indexação de conteúdo técnico sobre sistemas VRF, Daikin, HVAC
-
+# Robots.txt for WillRefriMix - HVAC-R & Air Conditioning Blog
 User-agent: *
 Allow: /
 Allow: /blog
@@ -11,25 +9,5 @@ Disallow: /admin
 Disallow: /admin/*
 Disallow: /auth
 
-# Crawl-delay for respectful crawling
-Crawl-delay: 1
-
-# Sitemap locations
+# Sitemap location
 Sitemap: https://willrefrimix.com/sitemap.xml
-Sitemap: https://hkcioctfwkbkzmuyorbs.supabase.co/functions/v1/sitemap
-
-# Additional directives for specific bots
-User-agent: Googlebot
-Allow: /
-Crawl-delay: 0.5
-
-User-agent: Bingbot
-Allow: /
-Crawl-delay: 1
-
-# Block AI scrapers (optional - remova se quiser permitir)
-User-agent: GPTBot
-Disallow: /
-
-User-agent: ChatGPT-User
-Disallow: /

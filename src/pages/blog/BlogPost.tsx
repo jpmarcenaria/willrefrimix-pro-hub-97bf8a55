@@ -138,7 +138,6 @@ export default function BlogPost() {
               <img
                 src={post.featured_image_url}
                 alt={post.title}
-                loading="lazy"
                 className="w-full h-full object-cover"
               />
             </div>
