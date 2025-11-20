@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
@@ -8,8 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Search, Calendar, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
-import OptimizedImage from '@/components/OptimizedImage';
-import { debounce } from 'lodash';
 
 interface Post {
   id: string;
@@ -38,7 +36,7 @@ export default function BlogList() {
       .from('posts')
       .select('id, title, slug, summary, featured_image_url, tags, publish_at, created_at')
       .eq('status', 'published')
-      .or(`publish_at.is.null,publish_at.lte.${new Date().toISOString()}`)
+      .lte('publish_at', new Date().toISOString())
       .order('publish_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false });
 
@@ -55,19 +53,12 @@ export default function BlogList() {
     setLoading(false);
   };
 
-  const filteredPosts = useMemo(() => {
-    return posts.filter(post => {
-      const matchesSearch = post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        post.summary?.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesTag = !selectedTag || post.tags?.includes(selectedTag);
-      return matchesSearch && matchesTag;
-    });
-  }, [posts, searchQuery, selectedTag]);
-
-  const debouncedSetSearchQuery = useCallback(
-    debounce((value: string) => setSearchQuery(value), 300),
-    []
-  );
+  const filteredPosts = posts.filter(post => {
+    const matchesSearch = post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      post.summary?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesTag = !selectedTag || post.tags?.includes(selectedTag);
+    return matchesSearch && matchesTag;
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -89,8 +80,8 @@ export default function BlogList() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar artigos..."
-                defaultValue={searchQuery}
-                onChange={(e) => debouncedSetSearchQuery(e.target.value)}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
               />
             </div>
@@ -140,12 +131,10 @@ export default function BlogList() {
                     <div className="md:flex">
                       {post.featured_image_url && (
                         <div className="md:w-1/3 h-48 md:h-auto overflow-hidden">
-                          <OptimizedImage
+                          <img
                             src={post.featured_image_url}
                             alt={post.title}
-                            className="w-full h-full group-hover:scale-105 transition-transform duration-300"
-                            height={192}
-                            objectFit="cover"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           />
                         </div>
                       )}

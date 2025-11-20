@@ -35,7 +35,7 @@ export default function Auth() {
             Sign in with Google
           </Button>
           <p className="text-xs text-muted-foreground text-center">
-            Only authorized accounts can access the admin panel
+            Only authorized accounts (refrimixtecnologia@gmail.com) can access the admin panel
           </p>
         </CardContent>
       </Card>

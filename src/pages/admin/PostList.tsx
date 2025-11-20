@@ -84,13 +84,10 @@ export default function PostList() {
     setDeleteId(null);
   };
 
-  const filteredPosts = posts.filter(post => {
-    const title = post.title || 'Sem título';
-    return (
-      title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      post.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
-  });
+  const filteredPosts = posts.filter(post =>
+    post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    post.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -108,24 +105,24 @@ export default function PostList() {
   const handleCreateNewPost = async () => {
     if (!user) {
       toast({
-        title: 'Não autenticado',
-        description: 'Faça login para criar um post.',
+        title: 'Not authenticated',
+        description: 'Please sign in to create a post.',
         variant: 'destructive',
       });
       navigate('/auth');
       return;
     }
 
-    const defaultTitle = `Novo Post ${new Date().toLocaleDateString('pt-BR')}`;
-    const defaultSlug = `novo-post-${Date.now()}`;
+    const defaultTitle = 'Untitled';
+    const defaultSlug = `untitled-${Date.now()}`;
 
-    const { data, error } = await supabase
+  const { data, error } = await supabase
       .from('posts')
       .insert([{
         title: defaultTitle,
         slug: defaultSlug,
         summary: '',
-        body: ' ', // Espaço para não ficar vazio
+        body: '',
         featured_image_url: '',
         youtube_url: '',
         tags: [],
@@ -137,7 +134,6 @@ export default function PostList() {
       .single();
 
     if (error) {
-      console.error('Error creating post:', error);
       const isRls = /row-level security/i.test(error.message);
       toast({
         title: 'Error creating post',
@@ -203,9 +199,7 @@ export default function PostList() {
               <CardHeader>
                 <div className="flex justify-between items-start gap-4">
                   <div className="flex-1 space-y-2">
-                    <CardTitle className="text-xl">
-                      {post.title || 'Sem título'}
-                    </CardTitle>
+                    <CardTitle className="text-xl">{post.title}</CardTitle>
                     <CardDescription className="flex flex-wrap items-center gap-2">
                       <Badge className={getStatusColor(post.status)}>
                         {post.status}

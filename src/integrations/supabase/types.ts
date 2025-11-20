@@ -85,15 +85,10 @@ export type Database = {
         Row: {
           author_id: string | null
           body: string
-          category: Database["public"]["Enums"]["post_category"] | null
           created_at: string
           featured_image_url: string | null
           id: string
-          keywords: string[] | null
-          meta_description: string | null
-          meta_title: string | null
           publish_at: string | null
-          reading_time_minutes: number | null
           slug: string
           status: Database["public"]["Enums"]["post_status"]
           summary: string | null
@@ -105,15 +100,10 @@ export type Database = {
         Insert: {
           author_id?: string | null
           body: string
-          category?: Database["public"]["Enums"]["post_category"] | null
           created_at?: string
           featured_image_url?: string | null
           id?: string
-          keywords?: string[] | null
-          meta_description?: string | null
-          meta_title?: string | null
           publish_at?: string | null
-          reading_time_minutes?: number | null
           slug: string
           status?: Database["public"]["Enums"]["post_status"]
           summary?: string | null
@@ -125,15 +115,10 @@ export type Database = {
         Update: {
           author_id?: string | null
           body?: string
-          category?: Database["public"]["Enums"]["post_category"] | null
           created_at?: string
           featured_image_url?: string | null
           id?: string
-          keywords?: string[] | null
-          meta_description?: string | null
-          meta_title?: string | null
           publish_at?: string | null
-          reading_time_minutes?: number | null
           slug?: string
           status?: Database["public"]["Enums"]["post_status"]
           summary?: string | null
@@ -216,13 +201,6 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "editor" | "viewer"
-      post_category:
-        | "technical"
-        | "case-study"
-        | "installation"
-        | "maintenance"
-        | "sustainability"
-        | "industry-news"
       post_status: "draft" | "published" | "scheduled"
     }
     CompositeTypes: {
@@ -352,14 +330,6 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "editor", "viewer"],
-      post_category: [
-        "technical",
-        "case-study",
-        "installation",
-        "maintenance",
-        "sustainability",
-        "industry-news",
-      ],
       post_status: ["draft", "published", "scheduled"],
     },
   },

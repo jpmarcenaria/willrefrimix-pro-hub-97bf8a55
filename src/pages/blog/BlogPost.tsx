@@ -6,29 +6,18 @@ import Footer from '@/components/Footer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Calendar, User, ArrowLeft, Clock } from 'lucide-react';
+import { Calendar, User, ArrowLeft, Youtube } from 'lucide-react';
 import { format } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
-import YouTubeEmbed from '@/components/blog/YouTubeEmbed';
-import ImageGallery from '@/components/blog/ImageGallery';
-import SocialShare from '@/components/blog/SocialShare';
-import SEOHead from '@/components/blog/SEOHead';
-import OptimizedImage from '@/components/OptimizedImage';
 
 interface Post {
   id: string;
   title: string;
-  slug: string;
   summary: string;
   body: string;
   featured_image_url: string;
   youtube_url: string;
   tags: string[];
-  keywords: string[];
-  category: string;
-  meta_title: string;
-  meta_description: string;
-  reading_time_minutes: number;
   publish_at: string | null;
   created_at: string;
   profiles: {
@@ -82,6 +71,10 @@ export default function BlogPost() {
     setLoading(false);
   };
 
+  const getYouTubeEmbedUrl = (url: string) => {
+    const videoId = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&]+)/)?.[1];
+    return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
+  };
 
   if (loading) {
     return (
@@ -111,18 +104,10 @@ export default function BlogPost() {
     );
   }
 
+  const embedUrl = post.youtube_url ? getYouTubeEmbedUrl(post.youtube_url) : null;
+
   return (
     <div className="min-h-screen bg-background">
-      <SEOHead
-        title={post.meta_title || post.title}
-        description={post.meta_description || post.summary}
-        keywords={post.keywords}
-        image={post.featured_image_url}
-        url={`https://willrefrimix.com/blog/${post.slug}`}
-        publishedTime={post.publish_at || post.created_at}
-        author={post.profiles?.name}
-        category={post.category}
-      />
       <Header />
       
       <main className="container mx-auto px-4 py-8">
@@ -136,12 +121,10 @@ export default function BlogPost() {
 
           {post.featured_image_url && (
             <div className="aspect-video rounded-xl overflow-hidden mb-8">
-              <OptimizedImage
+              <img
                 src={post.featured_image_url}
                 alt={post.title}
-                priority={true}
-                className="w-full h-full"
-                objectFit="cover"
+                className="w-full h-full object-cover"
               />
             </div>
           )}
@@ -173,12 +156,6 @@ export default function BlogPost() {
                   <span>{post.profiles.name}</span>
                 </div>
               )}
-              {post.reading_time_minutes > 0 && (
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  <span>{post.reading_time_minutes} min de leitura</span>
-                </div>
-              )}
             </div>
 
             {post.tags.length > 0 && (
@@ -198,26 +175,47 @@ export default function BlogPost() {
             <ReactMarkdown>{post.body}</ReactMarkdown>
           </div>
 
-          {post.youtube_url && (
+          {embedUrl && (
             <div className="my-12">
-              <h2 className="text-2xl font-bold mb-4">Vídeo</h2>
-              <YouTubeEmbed url={post.youtube_url} title={post.title} />
+              <div className="flex items-center gap-2 mb-4">
+                <Youtube className="h-5 w-5 text-primary" />
+                <h2 className="text-2xl font-bold">Vídeo</h2>
+              </div>
+              <div className="aspect-video rounded-xl overflow-hidden">
+                <iframe
+                  src={embedUrl}
+                  title={post.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="w-full h-full"
+                />
+              </div>
             </div>
           )}
 
           {images.length > 0 && (
             <div className="my-12">
               <h2 className="text-2xl font-bold mb-6">Galeria de Imagens</h2>
-              <ImageGallery images={images} />
+              <div className="grid md:grid-cols-2 gap-6">
+                {images.map((image, index) => (
+                  <div key={index} className="space-y-2">
+                    <div className="aspect-video rounded-lg overflow-hidden">
+                      <img
+                        src={image.url}
+                        alt={image.caption || `Imagem ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    {image.caption && (
+                      <p className="text-sm text-muted-foreground text-center">
+                        {image.caption}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
-
-          <Separator className="my-8" />
-          
-          <SocialShare 
-            title={post.title} 
-            url={`https://willrefrimix.com/blog/${post.slug}`} 
-          />
 
           <Separator className="my-12" />
 

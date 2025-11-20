@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { debounce } from 'lodash';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,13 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, Eye, Upload, X, Image as ImageIcon, RefreshCw, CheckCircle2, AlertCircle, Loader2, Clock } from 'lucide-react';
+import { ArrowLeft, Save, Eye, Upload, X, Image as ImageIcon } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Progress } from '@/components/ui/progress';
-import SEOPreview from '@/components/blog/SEOPreview';
-import ImageCropper from '@/components/admin/ImageCropper';
-import DateTimePicker from '@/components/admin/DateTimePicker';
-import type { RealtimeChannel } from '@supabase/supabase-js';
 
 interface PostData {
   title: string;
@@ -27,13 +21,8 @@ interface PostData {
   featured_image_url: string;
   youtube_url: string;
   tags: string[];
-  keywords: string[];
-  category: string;
-  meta_title: string;
-  meta_description: string;
   status: 'draft' | 'published' | 'scheduled';
   publish_at: string;
-  reading_time_minutes: number;
 }
 
 export default function PostEditor() {
@@ -46,17 +35,6 @@ export default function PostEditor() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [tagInput, setTagInput] = useState('');
-  const [keywordInput, setKeywordInput] = useState('');
-  const [autoSaving, setAutoSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'error'>('synced');
-  const [cropImage, setCropImage] = useState<File | null>(null);
-  const [isCropForFeatured, setIsCropForFeatured] = useState(false);
-  const [saveProgress, setSaveProgress] = useState(0);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const channelRef = useRef<RealtimeChannel | null>(null);
-  const initialLoadRef = useRef(true);
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const [formData, setFormData] = useState<PostData>({
     title: '',
@@ -66,13 +44,8 @@ export default function PostEditor() {
     featured_image_url: '',
     youtube_url: '',
     tags: [],
-    keywords: [],
-    category: 'technical',
-    meta_title: '',
-    meta_description: '',
     status: 'draft',
     publish_at: '',
-    reading_time_minutes: 0,
   });
 
   const [galleryImages, setGalleryImages] = useState<Array<{
@@ -85,184 +58,45 @@ export default function PostEditor() {
     if (!isNew && id) {
       fetchPost();
       fetchGalleryImages();
-      setupRealtimeSync();
     }
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-      }
-    };
   }, [id, isNew]);
-
-  // Real-time sync with Supabase
-  const setupRealtimeSync = () => {
-    if (!id) return;
-
-    channelRef.current = supabase
-      .channel(`post-${id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'posts',
-          filter: `id=eq.${id}`
-        },
-        (payload) => {
-          console.log('Real-time update received:', payload);
-          // Only update if it's not from our own edit
-          if (payload.new && !autoSaving) {
-            const newData = payload.new as any;
-            setFormData(prev => ({
-              ...prev,
-              title: newData.title || prev.title,
-              slug: newData.slug || prev.slug,
-              summary: newData.summary || prev.summary,
-              body: newData.body || prev.body,
-              status: newData.status || prev.status,
-              featured_image_url: newData.featured_image_url || prev.featured_image_url,
-              youtube_url: newData.youtube_url || prev.youtube_url,
-              tags: newData.tags || prev.tags,
-              keywords: newData.keywords || prev.keywords,
-              category: newData.category || prev.category,
-              meta_title: newData.meta_title || prev.meta_title,
-              meta_description: newData.meta_description || prev.meta_description,
-              publish_at: newData.publish_at ? new Date(newData.publish_at).toISOString().slice(0, 16) : '',
-              reading_time_minutes: newData.reading_time_minutes || prev.reading_time_minutes,
-            }));
-            
-            toast({
-              title: '🔄 Atualização detectada',
-              description: 'O post foi atualizado. Dados sincronizados.',
-            });
-          }
-        }
-      )
-      .subscribe();
-  };
-
-  // Auto-save function with proper error handling
-  const performAutoSave = useCallback(async (data: PostData) => {
-    if (!id || isNew || saving) return;
-    
-    setAutoSaving(true);
-    setSyncStatus('saving');
-    
-    try {
-      const { error } = await supabase
-        .from('posts')
-        .update({
-          title: data.title,
-          slug: data.slug,
-          body: data.body,
-          summary: data.summary,
-          category: data.category as any,
-          tags: data.tags,
-          keywords: data.keywords,
-          meta_title: data.meta_title,
-          meta_description: data.meta_description,
-          status: data.status as any,
-          publish_at: data.publish_at || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id);
-
-      if (error) throw error;
-
-      const now = new Date();
-      setLastSaved(now);
-      setSyncStatus('synced');
-      setHasUnsavedChanges(false);
-      
-      toast({
-        title: 'Post salvo automaticamente',
-        description: `Sincronizado ${now.toLocaleTimeString('pt-BR')}`,
-        duration: 2000,
-      });
-    } catch (error: any) {
-      console.error('Auto-save error:', error);
-      setSyncStatus('error');
-      toast({
-        title: 'Erro ao salvar',
-        description: error.message,
-        variant: 'destructive',
-        duration: 3000,
-      });
-    } finally {
-      setAutoSaving(false);
-    }
-  }, [id, isNew, saving]);
-
-  // Debounced auto-save for content fields (1500ms)
-  const debouncedContentSave = useCallback(
-    debounce((data: PostData) => {
-      performAutoSave(data);
-    }, 1500),
-    [performAutoSave]
-  );
-
-  // Debounced auto-save for status field (800ms)
-  const debouncedStatusSave = useCallback(
-    debounce((data: PostData) => {
-      performAutoSave(data);
-    }, 800),
-    [performAutoSave]
-  );
 
   const fetchPost = async () => {
     if (!id) return;
     
-    try {
-      const { data, error } = await supabase
-        .from('posts')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
+    const { data, error } = await supabase
+      .from('posts')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
 
-      if (error) throw error;
-
-      if (!data) {
-        toast({
-          title: '⚠ Post não encontrado',
-          description: 'O post não existe ou você não tem permissão.',
-          variant: 'destructive',
-        });
-        navigate('/admin/posts');
-        return;
-      }
-
-      // Populate form with fetched data
-      setFormData({
-        title: data.title || '',
-        slug: data.slug || '',
-        summary: data.summary || '',
-        body: data.body || '',
-        featured_image_url: data.featured_image_url || '',
-        youtube_url: data.youtube_url || '',
-        tags: data.tags || [],
-        keywords: data.keywords || [],
-        category: (data.category as PostData['category']) || 'technical',
-        meta_title: data.meta_title || '',
-        meta_description: data.meta_description || '',
-        status: data.status || 'draft',
-        publish_at: data.publish_at ? new Date(data.publish_at).toISOString().slice(0, 16) : '',
-        reading_time_minutes: data.reading_time_minutes || 0,
-      });
-      
-      setLastSaved(new Date(data.updated_at || data.created_at));
-      setSyncStatus('synced');
-    } catch (error: any) {
-      console.error('Error fetching post:', error);
+    if (error) {
       toast({
-        title: '✗ Erro ao carregar post',
+        title: 'Error fetching post',
         description: error.message,
         variant: 'destructive',
       });
       navigate('/admin/posts');
-    } finally {
       setLoading(false);
+      return;
     }
+
+    if (!data) {
+      toast({
+        title: 'Post not found or access denied',
+        description: 'It may be a draft you do not own or the post does not exist.',
+        variant: 'destructive',
+      });
+      navigate('/admin/posts');
+      setLoading(false);
+      return;
+    }
+
+    setFormData({
+      ...data,
+      publish_at: data.publish_at ? new Date(data.publish_at).toISOString().slice(0, 16) : '',
+    });
+    setLoading(false);
   };
 
   const fetchGalleryImages = async () => {
@@ -289,138 +123,48 @@ export default function PostEditor() {
   };
 
   const handleTitleChange = (title: string) => {
-    setHasUnsavedChanges(true);
-    const newFormData = { ...formData, title, slug: isNew ? generateSlug(title) : formData.slug };
-    setFormData(newFormData);
-    
-    if (!isNew && id) {
-      setSyncStatus('saving');
-      debouncedContentSave(newFormData);
-    }
-  };
-
-  const handleBodyChange = (body: string) => {
-    setHasUnsavedChanges(true);
-    const newFormData = { ...formData, body };
-    setFormData(newFormData);
-    
-    if (!isNew && id) {
-      setSyncStatus('saving');
-      debouncedContentSave(newFormData);
-    }
-  };
-
-  const handleSummaryChange = (summary: string) => {
-    setHasUnsavedChanges(true);
-    const newFormData = { ...formData, summary };
-    setFormData(newFormData);
-    
-    if (!isNew && id) {
-      setSyncStatus('saving');
-      debouncedContentSave(newFormData);
-    }
-  };
-
-  const handleStatusChange = (status: 'draft' | 'published' | 'scheduled') => {
-    setHasUnsavedChanges(true);
-    const newFormData = { ...formData, status };
-    setFormData(newFormData);
-    
-    if (!isNew && id) {
-      setSyncStatus('saving');
-      debouncedStatusSave(newFormData);
-    }
-  };
-
-  const handleFieldChange = (field: keyof PostData, value: any) => {
-    setHasUnsavedChanges(true);
-    const newFormData = { ...formData, [field]: value };
-    setFormData(newFormData);
-    
-    // Use appropriate debounce based on field type
-    if (!isNew && id) {
-      setSyncStatus('saving');
-      if (field === 'status') {
-        debouncedStatusSave(newFormData);
-      } else if (field === 'title' || field === 'body' || field === 'summary') {
-        debouncedContentSave(newFormData);
-      } else {
-        debouncedContentSave(newFormData);
-      }
-    }
-  };
-
-  const handleRegenerateSlug = () => {
-    if (!formData.title) {
-      toast({
-        title: '⚠ Título necessário',
-        description: 'Adicione um título antes de gerar o slug',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
-    const newSlug = generateSlug(formData.title);
-    handleFieldChange('slug', newSlug);
-    toast({
-      title: '✓ Slug regenerado',
-      description: `Novo slug: ${newSlug}`,
-    });
+    setFormData(prev => ({
+      ...prev,
+      title,
+      slug: isNew ? generateSlug(title) : prev.slug,
+    }));
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isFeatured: boolean = false) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Open cropper instead of direct upload
-    setCropImage(file);
-    setIsCropForFeatured(isFeatured);
-    e.target.value = ''; // Reset input
-  };
-
-  const handleCropComplete = async (croppedFile: File) => {
     setUploading(true);
-    setSaveProgress(0);
-    setSaveProgress(10);
-    const fileExt = croppedFile.name.split('.').pop();
+    const fileExt = file.name.split('.').pop();
     const fileName = `${Math.random()}.${fileExt}`;
     const filePath = `${fileName}`;
 
-    setSaveProgress(30);
     const { error: uploadError, data } = await supabase.storage
       .from('blog-images')
-      .upload(filePath, croppedFile);
+      .upload(filePath, file);
 
-    setSaveProgress(60);
     if (uploadError) {
       toast({
-        title: 'Erro ao fazer upload',
+        title: 'Error uploading image',
         description: uploadError.message,
         variant: 'destructive',
       });
-      setSyncStatus('error');
     } else {
-      setSaveProgress(80);
       const { data: { publicUrl } } = supabase.storage
         .from('blog-images')
         .getPublicUrl(filePath);
 
-      if (isCropForFeatured) {
-        handleFieldChange('featured_image_url', publicUrl);
+      if (isFeatured) {
+        setFormData(prev => ({ ...prev, featured_image_url: publicUrl }));
       } else {
         setGalleryImages(prev => [...prev, { url: publicUrl, caption: '' }]);
       }
 
-      setSaveProgress(100);
       toast({
-        title: '✓ Imagem enviada com sucesso',
-        description: 'Imagem otimizada e pronta para uso',
+        title: 'Image uploaded successfully',
       });
-      setSyncStatus('synced');
     }
     setUploading(false);
-    setCropImage(null);
-    setSaveProgress(0);
   };
 
   const addTag = () => {
@@ -440,70 +184,11 @@ export default function PostEditor() {
     }));
   };
 
-  const addKeyword = () => {
-    if (keywordInput.trim() && !formData.keywords.includes(keywordInput.trim())) {
-      if (formData.keywords.length >= 8) {
-        toast({
-          title: 'Maximum keywords reached',
-          description: 'You can add up to 8 keywords for optimal SEO',
-          variant: 'destructive',
-        });
-        return;
-      }
-      setFormData(prev => ({
-        ...prev,
-        keywords: [...prev.keywords, keywordInput.trim()],
-      }));
-      setKeywordInput('');
-    }
-  };
-
-  const removeKeyword = (keyword: string) => {
-    setFormData(prev => ({
-      ...prev,
-      keywords: prev.keywords.filter(k => k !== keyword),
-    }));
-  };
-
   const handleSave = async (status?: 'draft' | 'published') => {
-    // VALIDAÇÃO CRÍTICA: Bloquear salvamento se campos obrigatórios estiverem vazios
-    const titleTrimmed = formData.title?.trim();
-    const bodyTrimmed = formData.body?.trim();
-    
-    if (!titleTrimmed || titleTrimmed === '' || titleTrimmed === 'Untitled') {
+    if (!formData.title || !formData.body) {
       toast({
-        title: '🚫 Título obrigatório',
-        description: 'Adicione um título válido antes de salvar',
-        variant: 'destructive',
-        duration: 5000,
-      });
-      return;
-    }
-
-    if (!bodyTrimmed || bodyTrimmed === '') {
-      toast({
-        title: '🚫 Conteúdo obrigatório',
-        description: 'Adicione conteúdo ao post antes de salvar',
-        variant: 'destructive',
-        duration: 5000,
-      });
-      return;
-    }
-
-    // SEO validation when publishing
-    if ((status === 'published' || formData.status === 'published') && !formData.meta_description) {
-      toast({
-        title: 'Meta Description Required',
-        description: 'Please add a meta description (120-160 characters) for better SEO before publishing',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if ((status === 'published' || formData.status === 'published') && formData.keywords.length < 5) {
-      toast({
-        title: 'SEO Keywords Recommended',
-        description: 'Add at least 5 keywords for optimal SEO (currently: ' + formData.keywords.length + ')',
+        title: 'Missing required fields',
+        description: 'Please fill in title and body',
         variant: 'destructive',
       });
       return;
@@ -524,67 +209,53 @@ export default function PostEditor() {
     }
 
     setSaving(true);
-    setSyncStatus('saving');
-    setSaveProgress(0);
 
-    const postData: any = {
+    const postData = {
       ...formData,
       status: status || formData.status,
       author_id: user?.id,
       publish_at: formData.publish_at || null,
-      meta_title: formData.meta_title || formData.title.slice(0, 60),
-      meta_description: formData.meta_description || formData.summary?.slice(0, 160),
+      // Ensure slug exists when saving a new post
       slug: (formData.slug && formData.slug.trim().length > 0) ? formData.slug : generateSlug(formData.title),
     };
 
     let postId = id;
 
-    setSaveProgress(40);
     if (isNew) {
-      setSaveProgress(50);
       const { data, error } = await supabase
         .from('posts')
         .insert([postData])
         .select()
         .single();
 
-      setSaveProgress(70);
       if (error) {
         toast({
-          title: '✗ Erro ao criar post',
+          title: 'Error creating post',
           description: error.message,
           variant: 'destructive',
         });
-        setSyncStatus('error');
         setSaving(false);
-        setSaveProgress(0);
         return;
       }
-      setSaveProgress(90);
       postId = data.id;
     } else {
-      setSaveProgress(60);
       const { error } = await supabase
         .from('posts')
         .update(postData)
         .eq('id', id);
 
-      setSaveProgress(80);
       if (error) {
         toast({
-          title: '✗ Erro ao atualizar post',
+          title: 'Error updating post',
           description: error.message,
           variant: 'destructive',
         });
-        setSyncStatus('error');
         setSaving(false);
-        setSaveProgress(0);
         return;
       }
     }
 
     // Save gallery images
-    setSaveProgress(90);
     for (const [index, image] of galleryImages.entries()) {
       if (!image.id) {
         await supabase.from('images').insert([{
@@ -603,22 +274,11 @@ export default function PostEditor() {
       }
     }
 
-    setSaveProgress(100);
-    setLastSaved(new Date());
-    setSyncStatus('synced');
-    
-    const finalStatus = status || formData.status;
     toast({
-      title: '✓ Post salvo com sucesso',
-      description: finalStatus === 'published' 
-        ? 'Seu post está publicado e visível' 
-        : formData.status === 'scheduled' 
-        ? `Agendado para ${formData.publish_at ? new Date(formData.publish_at).toLocaleString() : ''}`
-        : 'Salvo como rascunho',
+      title: 'Post saved successfully',
     });
 
     setSaving(false);
-    setSaveProgress(0);
     if (isNew) {
       navigate(`/admin/posts/${postId}`);
     }
@@ -643,34 +303,6 @@ export default function PostEditor() {
           <h1 className="text-3xl font-bold">
             {isNew ? 'New Post' : 'Edit Post'}
           </h1>
-          {!isNew && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              {syncStatus === 'synced' && (
-                <span className="flex items-center gap-1 text-green-600">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Sincronizado
-                </span>
-              )}
-              {syncStatus === 'saving' && (
-                <span className="flex items-center gap-1">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Salvando...
-                </span>
-              )}
-              {syncStatus === 'error' && (
-                <span className="flex items-center gap-1 text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  Erro ao salvar
-                </span>
-              )}
-              {lastSaved && syncStatus === 'synced' && (
-                <span className="flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {lastSaved.toLocaleTimeString()}
-                </span>
-              )}
-            </div>
-          )}
         </div>
         <div className="flex gap-2">
           {!isNew && (
@@ -682,47 +314,27 @@ export default function PostEditor() {
             </Button>
           )}
           <Button onClick={() => handleSave('draft')} disabled={saving} variant="outline">
-            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Save Draft
           </Button>
           <Button onClick={() => handleSave('published')} disabled={saving}>
-            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            <Save className="mr-2 h-4 w-4" />
             {formData.status === 'published' ? 'Update' : 'Publish'}
           </Button>
         </div>
       </div>
 
-      {saveProgress > 0 && saveProgress < 100 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Processando...</span>
-            <span className="font-medium">{saveProgress}%</span>
-          </div>
-          <Progress value={saveProgress} className="h-2" />
-        </div>
-      )}
-
-        <Tabs defaultValue="content" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="content">Content</TabsTrigger>
-            <TabsTrigger value="seo">SEO</TabsTrigger>
-            <TabsTrigger value="media">Media</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
+      <Tabs defaultValue="content" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="content">Content</TabsTrigger>
+          <TabsTrigger value="media">Media</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
+        </TabsList>
 
         <TabsContent value="content" className="space-y-4">
           <Card>
             <CardContent className="pt-6 space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="title" className="flex items-center gap-2">
-                  Title *
-                  {formData.title && (
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  )}
-                  {!formData.title && (
-                    <AlertCircle className="h-4 w-4 text-yellow-600" />
-                  )}
-                </Label>
+                <Label htmlFor="title">Title *</Label>
                 <Input
                   id="title"
                   value={formData.title}
@@ -732,28 +344,13 @@ export default function PostEditor() {
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="slug">Slug</Label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleRegenerateSlug}
-                    disabled={!formData.title}
-                  >
-                    <RefreshCw className="h-3 w-3 mr-2" />
-                    Regenerar
-                  </Button>
-                </div>
+                <Label htmlFor="slug">Slug</Label>
                 <Input
                   id="slug"
                   value={formData.slug}
-                  onChange={(e) => handleFieldChange('slug', e.target.value)}
+                  onChange={(e) => setFormData(prev => ({ ...prev, slug: e.target.value }))}
                   placeholder="post-url-slug"
                 />
-                <p className="text-xs text-muted-foreground">
-                  URL amigável gerada automaticamente do título
-                </p>
               </div>
 
               <div className="space-y-2">
@@ -761,163 +358,23 @@ export default function PostEditor() {
                 <Textarea
                   id="summary"
                   value={formData.summary}
-                  onChange={(e) => handleSummaryChange(e.target.value)}
+                  onChange={(e) => setFormData(prev => ({ ...prev, summary: e.target.value }))}
                   placeholder="Brief summary of the post"
                   rows={3}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="body" className="flex items-center gap-2">
-                  Content (Markdown) *
-                  {formData.body && (
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  )}
-                  {!formData.body && (
-                    <AlertCircle className="h-4 w-4 text-yellow-600" />
-                  )}
-                </Label>
+                <Label htmlFor="body">Content (Markdown) *</Label>
                 <Textarea
                   id="body"
                   value={formData.body}
-                  onChange={(e) => handleBodyChange(e.target.value)}
+                  onChange={(e) => setFormData(prev => ({ ...prev, body: e.target.value }))}
                   placeholder="Write your post content in markdown..."
                   rows={15}
                   className="font-mono"
                 />
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="seo" className="space-y-4">
-          <SEOPreview
-            title={formData.meta_title || formData.title}
-            metaDescription={formData.meta_description}
-            slug={formData.slug}
-            featuredImage={formData.featured_image_url}
-          />
-
-          <Card>
-            <CardHeader>
-              <CardTitle>SEO Meta Tags</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Otimize seu conteúdo para motores de busca (Google, Bing) e redes sociais
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="meta_title">Meta Title</Label>
-                <Input
-                  id="meta_title"
-                  value={formData.meta_title}
-                  onChange={(e) => handleFieldChange('meta_title', e.target.value)}
-                  placeholder="Deixe vazio para usar o título do post"
-                  maxLength={60}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {formData.meta_title.length}/60 caracteres (ideal: 50-60)
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="meta_description">Meta Description *</Label>
-                <Textarea
-                  id="meta_description"
-                  value={formData.meta_description}
-                  onChange={(e) => handleFieldChange('meta_description', e.target.value)}
-                  placeholder="Descreva o conteúdo do post de forma atrativa (ideal: 120-160 caracteres)"
-                  maxLength={160}
-                  rows={3}
-                />
-                <div className="flex justify-between text-xs">
-                  <span className={
-                    formData.meta_description.length === 0 ? 'text-muted-foreground' :
-                    formData.meta_description.length >= 120 && formData.meta_description.length <= 160 ? 'text-green-600' :
-                    formData.meta_description.length > 160 ? 'text-destructive' :
-                    'text-yellow-600'
-                  }>
-                    {formData.meta_description.length}/160 caracteres
-                  </span>
-                  {formData.meta_description.length > 0 && (
-                    <span>
-                      {formData.meta_description.length >= 120 && formData.meta_description.length <= 160 ? '✓ Tamanho ideal' :
-                       formData.meta_description.length > 160 ? '⚠ Muito longo' :
-                       '⚠ Muito curto (ideal: 120-160)'}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>SEO Keywords</Label>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Adicione 5-8 palavras-chave relacionadas ao conteúdo (ex: VRF, Daikin, ar-condicionado, HVAC)
-                </p>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Adicionar keyword SEO"
-                    value={keywordInput}
-                    onChange={(e) => setKeywordInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addKeyword())}
-                  />
-                  <Button 
-                    type="button" 
-                    onClick={addKeyword}
-                    disabled={formData.keywords.length >= 8}
-                  >
-                    Add
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {formData.keywords.map((keyword) => (
-                    <Badge key={keyword} variant="secondary" className="gap-1">
-                      {keyword}
-                      <X
-                        className="h-3 w-3 cursor-pointer"
-                        onClick={() => removeKeyword(keyword)}
-                      />
-                    </Badge>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {formData.keywords.length}/8 keywords
-                  {formData.keywords.length < 5 && ' (recomendado: pelo menos 5)'}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="category">Categoria</Label>
-                <Select
-                  value={formData.category}
-                  onValueChange={(value: any) => handleFieldChange('category', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="technical">Técnico</SelectItem>
-                    <SelectItem value="case-study">Caso de Estudo</SelectItem>
-                    <SelectItem value="installation">Instalação</SelectItem>
-                    <SelectItem value="maintenance">Manutenção</SelectItem>
-                    <SelectItem value="sustainability">Sustentabilidade</SelectItem>
-                    <SelectItem value="industry-news">Notícias do Setor</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Dicas de SEO para HVAC-R</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>✓ Use palavras-chave naturalmente no texto</p>
-              <p>✓ Foque em termos técnicos: VRF, inverter, BTU, HVAC, refrigeração</p>
-              <p>✓ Mencione marcas líderes: Daikin, Carrier, Midea quando relevante</p>
-              <p>✓ Inclua localização quando apropriado (Brasil, São Paulo, etc.)</p>
-              <p>✓ Meta description deve ser atrativa e incluir call-to-action</p>
             </CardContent>
           </Card>
         </TabsContent>
@@ -939,7 +396,7 @@ export default function PostEditor() {
                     variant="destructive"
                     size="sm"
                     className="absolute top-2 right-2"
-                    onClick={() => handleFieldChange('featured_image_url', '')}
+                    onClick={() => setFormData(prev => ({ ...prev, featured_image_url: '' }))}
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -1012,7 +469,7 @@ export default function PostEditor() {
               <Input
                 placeholder="https://www.youtube.com/watch?v=..."
                 value={formData.youtube_url}
-                onChange={(e) => handleFieldChange('youtube_url', e.target.value)}
+                onChange={(e) => setFormData(prev => ({ ...prev, youtube_url: e.target.value }))}
               />
             </CardContent>
           </Card>
@@ -1028,7 +485,7 @@ export default function PostEditor() {
                 <Label htmlFor="status">Status</Label>
                 <Select
                   value={formData.status}
-                  onValueChange={handleStatusChange}
+                  onValueChange={(value: any) => setFormData(prev => ({ ...prev, status: value }))}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -1042,11 +499,15 @@ export default function PostEditor() {
               </div>
 
               {formData.status === 'scheduled' && (
-                <DateTimePicker
-                  label="Data e Hora de Publicação"
-                  value={formData.publish_at}
-                  onChange={(value) => handleFieldChange('publish_at', value)}
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="publish_at">Publish At</Label>
+                  <Input
+                    id="publish_at"
+                    type="datetime-local"
+                    value={formData.publish_at}
+                    onChange={(e) => setFormData(prev => ({ ...prev, publish_at: e.target.value }))}
+                  />
+                </div>
               )}
 
               <div className="space-y-2">
@@ -1076,18 +537,6 @@ export default function PostEditor() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      {cropImage && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="max-w-2xl w-full">
-            <ImageCropper
-              file={cropImage}
-              onCropComplete={handleCropComplete}
-              onCancel={() => setCropImage(null)}
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
