@@ -23,7 +23,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isEditor, setIsEditor] = useState(false);
   const navigate = useNavigate();
-  const ALLOWED_ADMIN_EMAILS = ['refrimixtecnologia@gmail.com'];
 
   useEffect(() => {
     // Set up auth state listener
@@ -31,13 +30,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        // keep loading true until roles are resolved to avoid premature redirects
+        
+        // Fetch user roles when user changes
         if (session?.user) {
-          fetchUserRoles(session.user.id, session.user.email ?? undefined);
+          setTimeout(() => {
+            fetchUserRoles(session.user.id);
+          }, 0);
         } else {
           setIsAdmin(false);
           setIsEditor(false);
-          setLoading(false);
         }
       }
     );
@@ -47,16 +48,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchUserRoles(session.user.id, session.user.email ?? undefined);
-      } else {
-        setLoading(false);
+        fetchUserRoles(session.user.id);
       }
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchUserRoles = async (userId: string, userEmail?: string) => {
+  const fetchUserRoles = async (userId: string) => {
     const { data, error } = await supabase
       .from('user_roles')
       .select('role')
@@ -64,19 +64,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       console.error('Error fetching user roles:', error);
-      const fallbackIsAdmin = !!userEmail && ALLOWED_ADMIN_EMAILS.includes(userEmail);
-      setIsAdmin(fallbackIsAdmin);
-      setIsEditor(fallbackIsAdmin);
-      setLoading(false);
       return;
     }
 
     const roles = data?.map(r => r.role) || [];
-    const hasAdminRole = roles.includes('admin');
-    const hasEditorRole = roles.includes('admin') || roles.includes('editor');
-    const emailIsAdmin = !!userEmail && ALLOWED_ADMIN_EMAILS.includes(userEmail);
-    setIsAdmin(hasAdminRole || emailIsAdmin);
-    setIsEditor(hasEditorRole || emailIsAdmin);
+    setIsAdmin(roles.includes('admin'));
+    setIsEditor(roles.includes('admin') || roles.includes('editor'));
     setLoading(false);
   };
 

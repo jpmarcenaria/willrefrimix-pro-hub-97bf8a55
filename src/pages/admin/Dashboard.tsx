@@ -11,10 +11,10 @@ export default function Dashboard() {
   const location = useLocation();
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (!loading && (!user || !isAdmin)) {
       navigate('/auth', { replace: true });
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, isAdmin, navigate]);
 
   const isActive = useCallback(
     (path: string) => location.pathname.startsWith(path),
@@ -36,25 +36,6 @@ export default function Dashboard() {
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
           <p className="text-sm text-muted-foreground">Carregando...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (user && !isAdmin) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center space-y-4">
-          <h1 className="text-2xl font-semibold">Acesso restrito</h1>
-          <p className="text-muted-foreground">Sua conta não possui permissão para acessar o painel administrativo.</p>
-          <div className="flex justify-center gap-2">
-            <Link to="/">
-              <Button variant="outline" size="sm" aria-label="View public site">
-                <Home className="mr-2 h-4 w-4" />
-                Ir para o site
-              </Button>
-            </Link>
-          </div>
         </div>
       </div>
     );

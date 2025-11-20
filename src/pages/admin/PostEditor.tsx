@@ -68,7 +68,7 @@ export default function PostEditor() {
       .from('posts')
       .select('*')
       .eq('id', id)
-      .maybeSingle();
+      .single();
 
     if (error) {
       toast({
@@ -77,25 +77,12 @@ export default function PostEditor() {
         variant: 'destructive',
       });
       navigate('/admin/posts');
-      setLoading(false);
-      return;
-    }
-
-    if (!data) {
-      toast({
-        title: 'Post not found or access denied',
-        description: 'It may be a draft you do not own or the post does not exist.',
-        variant: 'destructive',
+    } else {
+      setFormData({
+        ...data,
+        publish_at: data.publish_at ? new Date(data.publish_at).toISOString().slice(0, 16) : '',
       });
-      navigate('/admin/posts');
-      setLoading(false);
-      return;
     }
-
-    setFormData({
-      ...data,
-      publish_at: data.publish_at ? new Date(data.publish_at).toISOString().slice(0, 16) : '',
-    });
     setLoading(false);
   };
 
@@ -194,20 +181,6 @@ export default function PostEditor() {
       return;
     }
 
-    // Basic YouTube URL validation if provided
-    const ytUrl = formData.youtube_url?.trim();
-    if (ytUrl) {
-      const isValidYoutube = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[^\s&]+/.test(ytUrl);
-      if (!isValidYoutube) {
-        toast({
-          title: 'Invalid YouTube URL',
-          description: 'Provide a valid YouTube link like https://www.youtube.com/watch?v=...',
-          variant: 'destructive',
-        });
-        return;
-      }
-    }
-
     setSaving(true);
 
     const postData = {
@@ -215,8 +188,6 @@ export default function PostEditor() {
       status: status || formData.status,
       author_id: user?.id,
       publish_at: formData.publish_at || null,
-      // Ensure slug exists when saving a new post
-      slug: (formData.slug && formData.slug.trim().length > 0) ? formData.slug : generateSlug(formData.title),
     };
 
     let postId = id;
