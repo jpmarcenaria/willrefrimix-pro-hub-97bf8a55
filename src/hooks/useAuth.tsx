@@ -30,15 +30,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
-        // Fetch user roles when user changes
+        // keep loading true until roles are resolved to avoid premature redirects
         if (session?.user) {
-          setTimeout(() => {
-            fetchUserRoles(session.user.id);
-          }, 0);
+          fetchUserRoles(session.user.id, session.user.email ?? undefined);
         } else {
           setIsAdmin(false);
           setIsEditor(false);
+          setLoading(false);
         }
       }
     );
@@ -48,15 +46,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchUserRoles(session.user.id);
+        fetchUserRoles(session.user.id, session.user.email ?? undefined);
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchUserRoles = async (userId: string) => {
+  const fetchUserRoles = async (userId: string, userEmail?: string) => {
     const { data, error } = await supabase
       .from('user_roles')
       .select('role')
@@ -64,12 +63,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       console.error('Error fetching user roles:', error);
+      setIsAdmin(false);
+      setIsEditor(false);
+      setLoading(false);
       return;
     }
 
     const roles = data?.map(r => r.role) || [];
-    setIsAdmin(roles.includes('admin'));
-    setIsEditor(roles.includes('admin') || roles.includes('editor'));
+    const hasAdminRole = roles.includes('admin');
+    const hasEditorRole = roles.includes('admin') || roles.includes('editor');
+    setIsAdmin(hasAdminRole);
+    setIsEditor(hasEditorRole);
     setLoading(false);
   };
 

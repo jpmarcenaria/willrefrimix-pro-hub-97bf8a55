@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Plus, Search, Pencil, Trash2, Eye } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,6 +35,8 @@ export default function PostList() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchPosts();
@@ -99,6 +102,63 @@ export default function PostList() {
     }
   };
 
+  const handleCreateNewPost = async () => {
+    if (!user) {
+      toast({
+        title: 'Not authenticated',
+        description: 'Please sign in to create a post.',
+        variant: 'destructive',
+      });
+      navigate('/auth');
+      return;
+    }
+
+    const defaultTitle = 'Untitled';
+    const defaultSlug = `untitled-${Date.now()}`;
+
+  const { data, error } = await supabase
+      .from('posts')
+      .insert([{
+        title: defaultTitle,
+        slug: defaultSlug,
+        summary: '',
+        body: '',
+        featured_image_url: '',
+        youtube_url: '',
+        tags: [],
+        status: 'draft',
+        publish_at: null,
+        author_id: user.id,
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      const isRls = /row-level security/i.test(error.message);
+      toast({
+        title: 'Error creating post',
+        description: isRls
+          ? 'Permission denied by database policy. Please ensure you are authenticated and allowed to create posts.'
+          : error.message,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!data || !data.id) {
+      toast({
+        title: 'Draft creation incomplete',
+        description: 'Post was created but could not retrieve its ID. Please refresh the list.',
+        variant: 'destructive',
+      });
+      fetchPosts();
+      return;
+    }
+
+    toast({ title: 'Draft created successfully' });
+    navigate(`/admin/posts/${data.id}`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -106,12 +166,10 @@ export default function PostList() {
           <h1 className="text-3xl font-bold text-foreground">Blog Posts</h1>
           <p className="text-muted-foreground mt-1">Manage your blog content</p>
         </div>
-        <Link to="/admin/posts/new">
-          <Button size="lg">
-            <Plus className="mr-2 h-4 w-4" />
-            New Post
-          </Button>
-        </Link>
+        <Button size="lg" onClick={handleCreateNewPost} aria-label="Create New Post">
+          <Plus className="mr-2 h-4 w-4" />
+          New Post
+        </Button>
       </div>
 
       <div className="relative">

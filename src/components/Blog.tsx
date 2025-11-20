@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, BookOpen } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const Blog = () => {
   const posts = [
@@ -59,27 +60,31 @@ const Blog = () => {
                 <p className="text-muted-foreground mb-4 leading-relaxed">
                   {post.excerpt}
                 </p>
-                <Button
-                  variant="ghost"
-                  className="text-primary hover:text-primary/80 p-0 h-auto font-semibold group/btn"
-                >
-                  Leia mais
-                  <ArrowRight className="ml-2 h-4 w-4 group-hover/btn:translate-x-1 transition-transform duration-200" />
-                </Button>
+                <Link to="/blog" aria-label="Leia mais do blog">
+                  <Button
+                    variant="ghost"
+                    className="text-primary hover:text-primary/80 p-0 h-auto font-semibold group/btn"
+                  >
+                    Leia mais
+                    <ArrowRight className="ml-2 h-4 w-4 group-hover/btn:translate-x-1 transition-transform duration-200" />
+                  </Button>
+                </Link>
               </div>
             </div>
           ))}
         </div>
 
         <div className="text-center mt-12">
-          <Button
-            size="lg"
-            variant="outline"
-            className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-          >
-            Ver Todos os Artigos
-            <ArrowRight className="ml-2 h-5 w-5" />
-          </Button>
+          <Link to="/blog" aria-label="Ver todos os artigos">
+            <Button
+              size="lg"
+              variant="outline"
+              className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+            >
+              Ver Todos os Artigos
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+          </Link>
         </div>
       </div>
     </section>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -41,6 +42,13 @@ const Header = () => {
                 {item.label}
               </button>
             ))}
+            <Link
+              to="/auth"
+              className="text-foreground hover:text-primary transition-colors duration-200 font-medium"
+              aria-label="Admin Blog (Login)"
+            >
+              Admin Blog
+            </Link>
           </nav>
 
           {/* Mobile Menu Button */}
@@ -66,6 +74,14 @@ const Header = () => {
                 {item.label}
               </button>
             ))}
+            <Link
+              to="/auth"
+              className="block w-full text-left py-3 text-foreground hover:text-primary hover:bg-muted/50 rounded-md px-4 transition-all duration-200"
+              aria-label="Admin Blog (Login)"
+              onClick={() => setIsMenuOpen(false)}
+            >
+              Admin Blog
+            </Link>
           </nav>
         )}
       </div>

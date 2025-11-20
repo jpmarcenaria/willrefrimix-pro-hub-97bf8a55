@@ -10,8 +10,10 @@ const Hero = () => {
       style={{
         backgroundImage: `linear-gradient(135deg, rgba(0, 61, 107, 0.95), rgba(0, 153, 204, 0.85)), url(${heroImage})`,
         backgroundSize: "cover",
-        backgroundPosition: "center",
+        // Ajuste para destacar o rosto do humano (levemente acima do centro)
+        backgroundPosition: "center 20%",
         backgroundAttachment: "fixed",
+        backgroundRepeat: "no-repeat",
       }}
     >
       <div className="container mx-auto px-4 py-20 relative z-10">
